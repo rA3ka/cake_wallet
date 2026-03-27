@@ -15,7 +15,7 @@
 </div>
 
 > [!NOTE]  
-> This fork adds Anyone by compiling `torch.cpp` against `libanon.so` which is built using [anyone-protocol/anon-android](https://github.com/anyone-protocol/anon-android)
+> This fork adds Anyone Protocol by compiling `torch.cpp` against `libanon.so` which is built using [anyone-protocol/anon-android](https://github.com/anyone-protocol/anon-android)
 
 # Cake Wallet
 
