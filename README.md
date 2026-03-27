@@ -15,13 +15,21 @@
 </div>
 
 > [!NOTE]  
-> This fork adds Anyone Protocol by compiling `torch.cpp` against `libanon.so` which is built from [anyone-protocol/anon-android](https://github.com/anyone-protocol/anon-android)
+> This fork integrates Anyone Protocol by compiling `torch.cpp` against `libanon.so` which is built from [anyone-protocol/anon-android](https://github.com/anyone-protocol/anon-android)
+
+## Building the app for arm64/x64
+
+```
+wget https://github.com/rA3ka/cake_wallet/blob/dev/build_android.sh
+bash build_android.sh
+```
+Running `bash build_android.sh` clones this repo and [anon-android](https://github.com/anyone-protocol/anon-android)
 
 # Cake Wallet
 
 
 [Cake Wallet](https://cakewallet.com) is an open-source, non-custodial, and private multi-currency crypto wallet for Android, iOS, macOS, and Linux.
-
+<!--
 Cake Wallet includes support for several cryptocurrencies, including:
 * Monero (XMR)
 * Bitcoin (BTC)
@@ -87,13 +95,13 @@ Cake Wallet includes support for several cryptocurrencies, including:
 * Litecoin coin control (specify specific outputs to spend)
 * Automatically generate new addresses
 * Specify multiple recipients for batch sending
-<!--
+
 # Monero.com by Cake Wallet for Android and iOS
--->
+
 ## Open Source Monero-Only Wallet
 
 *Exchanging to/from other assets is also supported.*
-
+-->
 <!-- ## Links
 
 * Website: https://monero.com
@@ -130,7 +138,7 @@ For instructions on how to build for Android: please view file `howto-build-andr
 ## Improving translations
 
 Edit the applicable `strings_XX.arb` file in `res/values/` and open a pull request with the changes.
--->
+
 ## Current list of language files:
 
 - English
@@ -158,7 +166,7 @@ Edit the applicable `strings_XX.arb` file in `res/values/` and open a pull reque
 - Indonesian
 - Hausa
 - Yoruba
-<!--
+
 ## Add a new language
 
 1. Create a new `strings_XX.arb` file in `res/values/`, replacing XX with the language's [ISO 639-1 code](https://en.wikipedia.org/wiki/ISO_639-1).
