@@ -207,38 +207,6 @@ for ABI in arm64-v8a armeabi-v7a x86_64 x86; do
   cp $DEPSDIR/anon-build/libs/$ABI/libanon.so anon-build/libs/$ABI/
 done
 
-## Replace Dockerfile.torch (skip Tor build)
-
-# cat > scripts/android/docker/Dockerfile.torch << 'DOCKEREOF'
-# ARG BASE_IMAGE
-
-# FROM --platform=linux/amd64 ${BASE_IMAGE} AS build
-
-# COPY scripts/prepare_torch.sh /w/scripts/prepare_torch.sh
-# RUN /w/scripts/prepare_torch.sh
-
-# COPY anon-build/out/arm64-v8a/libtorch.so /w/scripts/torch_dart/android/src/main/jniLibs/arm64-v8a/libtorch.so
-# COPY anon-build/out/armeabi-v7a/libtorch.so /w/scripts/torch_dart/android/src/main/jniLibs/armeabi-v7a/libtorch.so
-# COPY anon-build/out/x86_64/libtorch.so /w/scripts/torch_dart/android/src/main/jniLibs/x86_64/libtorch.so
-# COPY anon-build/out/x86/libtorch.so /w/scripts/torch_dart/android/src/main/jniLibs/x86/libtorch.so
-
-# COPY anon-build/libs/arm64-v8a/libanon.so /w/scripts/torch_dart/android/src/main/jniLibs/arm64-v8a/libanon.so
-# COPY anon-build/libs/armeabi-v7a/libanon.so /w/scripts/torch_dart/android/src/main/jniLibs/armeabi-v7a/libanon.so
-# COPY anon-build/libs/x86_64/libanon.so /w/scripts/torch_dart/android/src/main/jniLibs/x86_64/libanon.so
-# COPY anon-build/libs/x86/libanon.so /w/scripts/torch_dart/android/src/main/jniLibs/x86/libanon.so
-
-# FROM --platform=linux/amd64 alpine
-# COPY --from=build /w /w
-# DOCKEREOF
-
-## 5: Speed up Gradle
-
-# grep -q "org.gradle.parallel" android/gradle.properties || {
-#   echo "org.gradle.parallel=true" >> android/gradle.properties
-#   echo "org.gradle.workers.max=12" >> android/gradle.properties
-#   echo "org.gradle.caching=true" >> android/gradle.properties
-# }
-
 ## Run Docker build for all native DEPSDIR
 
 cd $CAKE
@@ -280,7 +248,7 @@ flutter pub get
 dart run tool/generate_android_key_properties.dart keyAlias=testKey storeFile=key.jks storePassword=hunter1 keyPassword=hunter1
 dart run tool/generate_localization.dart
 dart run tool/generate_new_secrets.dart
-flutter build apk --release --target-platform android-arm64
+flutter build apk --release --split-per-abi --target-platform android-arm64,android-x64
 EOF
 
 echo "=== BUILD COMPLETE ==="
