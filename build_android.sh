@@ -1,45 +1,98 @@
 #!/bin/bash
 set -e
 
-WORKDIR=./build_android
+WORKDIR=$(pwd)/build
 DEPSDIR=$WORKDIR/dependencies
 CAKE=$WORKDIR/cake_wallet
+
+if [ ! -f "$WORKDIR/.env" ]; then
+  echo "ERROR: $WORKDIR/.env not found. See $WORKDIR/.env-example"
+  exit 1
+fi
+
+source $WORKDIR/.env
 
 mkdir -p $DEPSDIR
 
 ## Clone cake_wallet repo
 
 if [ ! -d "$CAKE" ]; then
+  echo -e "\n=== Cloning cake_wallet repo ===\n"
   git clone --recursive https://github.com/rA3ka/cake_wallet $CAKE
-  echo "=== Cloning cake_wallet repo ==="
 else
-  echo "=== cake_wallet repo exists, skipping ==="
-fi
-
-## Build libanon.so from anon-android
-
-if [ -f "$DEPSDIR/anon-android/external/lib/arm64-v8a/libanon.so" ]; then
-  echo "=== libanon.so already built, skipping ==="
-elif [ ! -d "$DEPSDIR/anon-android" ]; then
-    git clone --recursive https://github.com/anyone-protocol/anon-android.git $DEPSDIR/anon-android
+  cd $CAKE
+  git fetch origin
+  BRANCH=$(git rev-parse --abbrev-ref HEAD)
+  LOCAL=$(git rev-parse HEAD)
+  REMOTE=$(git rev-parse origin/$BRANCH)
+  if [ "$LOCAL" != "$REMOTE" ]; then
+    echo -e "\n=== Updating cake_wallet repo ===\n"
+    git pull origin $BRANCH
+    git submodule update --init --recursive
   else
-    cd $DEPSDIR/anon-android
-    ./anon-make.sh fetch
-    ./anon-make.sh build
+    echo -e "\n=== cake_wallet repo up to date, skipping ===\n"
+  fi
+  cd -
 fi
 
-## Build libtorch.so wrapper
+## Clone anon-android repo
+
+if [ ! -d "$DEPSDIR/anon-android" ]; then
+  echo -e "\n=== Cloning anon-android ===\n"
+  git clone --recursive https://github.com/anyone-protocol/anon-android.git $DEPSDIR/anon-android
+else
+  cd $DEPSDIR/anon-android
+  git fetch origin
+  BRANCH=$(git rev-parse --abbrev-ref HEAD)
+  LOCAL=$(git rev-parse HEAD)
+  REMOTE=$(git rev-parse origin/$BRANCH)
+  if [ "$LOCAL" != "$REMOTE" ]; then
+    echo -e "\n=== Updating anon-android ===\n"
+    git pull origin $BRANCH
+    git submodule update --init --recursive
+  else
+    echo -e "\n=== anon-android up to date, skipping ===\n"
+  fi
+  cd -
+fi
+
+## Build libtorch.so wrapper (Docker)
 
 if [ -f "$DEPSDIR/anon-build/out/arm64-v8a/libtorch.so" ]; then
-  echo "=== libtorch.so already built, skipping ==="
+  echo -e "\n=== Anyone libs already built, skipping ===\n"
 else
-  mkdir -p $DEPSDIR/anon-build && cd $DEPSDIR/anon-build
+  echo -e "\n=== Building libanon.so and libtorch.so inside Docker ===\n"
+  mkdir -p $DEPSDIR/anon-build
+  docker run --platform linux/amd64 \
+    -v$DEPSDIR:$DEPSDIR \
+    -w $DEPSDIR -i --rm \
+    ghcr.io/cake-tech/cake_wallet:debian13-flutter3.32.0-ndkr28-go1.24.1-ruststablenightly \
+    bash << 'DEOF'
+set -x -e
+ 
+apt-get update && apt-get install -y autopoint gettext po4a autoconf automake libtool
 
-  ANON_SRC=$DEPSDIR/anon-android/external/anon
-  ln -sf $ANON_SRC/src $ANON_SRC/tor
+export ANDROID_HOME=/opt/android-sdk-linux
+export NDK=$(ls -d $ANDROID_HOME/ndk/*/ | head -1)
+export TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
+export ANDROID_NDK_HOME=$NDK
+export API=24
+DEPS=$(pwd)
 
-  mkdir -p torch
-  cat > torch/torch.h << 'HEADER'
+# Build libanon.so
+cd anon-android
+./anon-make.sh fetch
+./anon-make.sh build -a "arm64-v8a armeabi-v7a x86_64"
+cd $DEPS
+
+# Build libtorch.so
+cd anon-build
+
+ANON_SRC=$DEPS/anon-android/external/anon
+ln -sf $ANON_SRC/src $ANON_SRC/tor
+
+mkdir -p torch
+cat > torch/torch.h << 'HEADER'
 #ifndef TORCH_LIBRARY_H
 #define TORCH_LIBRARY_H
 #ifdef __cplusplus
@@ -54,7 +107,7 @@ const char* TOR_version();
 #endif
 HEADER
 
-  cat > torch/torch.cpp << 'CPPFILE'
+cat > torch/torch.cpp << 'CPPFILE'
 #include "torch.h"
 #include <iostream>
 #if !defined(_WIN32) && !defined(__MINGW32__)
@@ -162,46 +215,39 @@ const char* TOR_version() { return tor_api_get_provider_version(); }
 #endif
 CPPFILE
 
-  ANONLIBS=$DEPSDIR/anon-android/external/lib
-  mkdir -p libs/arm64-v8a libs/armeabi-v7a libs/x86_64 libs/x86
-  cp $ANONLIBS/arm64-v8a/libanon.so libs/arm64-v8a/
-  cp $ANONLIBS/armeabi-v7a/libanon.so libs/armeabi-v7a/
-  cp $ANONLIBS/x86_64/libanon.so libs/x86_64/
-  cp $ANONLIBS/x86/libanon.so libs/x86/
+ANONLIBS=$DEPS/anon-android/external/lib
+mkdir -p libs/arm64-v8a libs/armeabi-v7a libs/x86_64
+cp $ANONLIBS/arm64-v8a/libanon.so libs/arm64-v8a/
+cp $ANONLIBS/armeabi-v7a/libanon.so libs/armeabi-v7a/
+cp $ANONLIBS/x86_64/libanon.so libs/x86_64/
 
-  export NDK=$ANDROID_HOME/ndk/26.1.10909125
-  export TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
-  export API=24
-  mkdir -p out/arm64-v8a out/armeabi-v7a out/x86_64 out/x86
+mkdir -p out/arm64-v8a out/armeabi-v7a out/x86_64
 
-  TARGETS=(
-    "aarch64-linux-android:arm64-v8a"
-    "armv7a-linux-androideabi:armeabi-v7a"
-    "x86_64-linux-android:x86_64"
-    "i686-linux-android:x86"
-  )
-  for TARGET in "${TARGETS[@]}"; do
-    TRIPLE="${TARGET%%:*}"
-    ABI="${TARGET##*:}"
-    echo "=== Building libtorch.so for $ABI ==="
-    $TOOLCHAIN/bin/clang++ \
-      --target=${TRIPLE}${API} \
-      -shared -fPIC -std=c++17 \
-      -DANDROID -D__ANDROID__ \
-      -I $ANON_SRC/ \
-      -L libs/$ABI/ \
-      -o out/$ABI/libtorch.so \
-      torch/torch.cpp \
-      -lanon -llog -nostdlib++ -lc++_static -lc++abi -lc -lm -ldl
-    nm -D out/$ABI/libtorch.so | grep "TOR_start\|TOR_version"
-  done
+for TARGET in "aarch64-linux-android:arm64-v8a" "armv7a-linux-androideabi:armeabi-v7a" "x86_64-linux-android:x86_64"; do
+  TRIPLE="${TARGET%%:*}"
+  ABI="${TARGET##*:}"
+  echo -e "\n=== Building libtorch.so for $ABI ===\n"
+  $TOOLCHAIN/bin/clang++ \
+    --target=${TRIPLE}${API} \
+    -shared -fPIC -std=c++17 \
+    -DANDROID -D__ANDROID__ \
+    -I $ANON_SRC/ \
+    -L libs/$ABI/ \
+    -o out/$ABI/libtorch.so \
+    torch/torch.cpp \
+    -lanon -llog -nostdlib++ -lc++_static -lc++abi -lc -lm -ldl
+  nm -D out/$ABI/libtorch.so | grep "TOR_start\|TOR_version"
+done
+
+echo -e "\n=== Anyone libs built ===\n"
+DEOF
 fi
 
 ## Copy Anyone libs into cake_wallet for Docker build
 
-# cd $CAKE
+cd $CAKE
 mkdir -p anon-build/out anon-build/libs
-for ABI in arm64-v8a armeabi-v7a x86_64 x86; do
+for ABI in arm64-v8a armeabi-v7a x86_64; do
   mkdir -p anon-build/out/$ABI anon-build/libs/$ABI
   cp $DEPSDIR/anon-build/out/$ABI/libtorch.so anon-build/out/$ABI/
   cp $DEPSDIR/anon-build/libs/$ABI/libanon.so anon-build/libs/$ABI/
@@ -214,9 +260,7 @@ pushd scripts/android
   docker/build.sh
 popd
 
-## Create bitcoin secrets if missing (Cake Wallet repo bug)
-
-source $WORKDIR/.env 2>/dev/null || true
+## Create bitcoin secrets if missing (Cake Wallet repo bug?)
 
 if [ ! -f "cw_bitcoin/lib/.secrets.g.dart" ]; then
   echo "const breezApiKey = \"${BREEZ_API_KEY:-dummy_key}\";" > cw_bitcoin/lib/.secrets.g.dart
@@ -228,7 +272,10 @@ cd $CAKE
 
 docker run \
   -v$(pwd):$(pwd) \
-  -v$HOME/.pub-cache-docker:/root/.pub-cache \
+  -v$WORKDIR/.pub-cache:/root/.pub-cache \
+  -e KEY_STORE_PASSWORD="$KEY_STORE_PASSWORD" \
+  -e CN_NAME="$CN_NAME" \
+  -e ORG_NAME="$ORG_NAME" \
   -w $(pwd) -i --rm \
   ghcr.io/cake-tech/cake_wallet:debian13-flutter3.32.0-ndkr28-go1.24.1-ruststablenightly \
   bash -x << 'EOF'
@@ -239,17 +286,29 @@ pushd scripts/android
   ./app_config.sh
 popd
 pushd android/app
-  [[ -f key.jks ]] || keytool -genkey -v -keystore key.jks -keyalg RSA \
-    -keysize 2048 -validity 10000 -alias testKey -noprompt \
-    -dname "CN=CakeWallet" -storepass hunter1 -keypass hunter1
+  [[ -f key.jks ]] || keytool -v \
+    -genkey \
+    -keystore key.jks \
+    -keyalg RSA \
+    -keysize 2048 \
+    -validity 10000 \
+    -alias testKey \
+    -noprompt \
+    -dname "CN=$CN_NAME, O=$ORG_NAME" \
+    -storepass "$KEY_STORE_PASSWORD" \
+    -keypass "$KEY_STORE_PASSWORD"
 popd
 flutter pub get
 ./model_generator.sh
-dart run tool/generate_android_key_properties.dart keyAlias=testKey storeFile=key.jks storePassword=hunter1 keyPassword=hunter1
+dart run tool/generate_android_key_properties.dart \
+  keyAlias=testKey \
+  storeFile=key.jks \
+  storePassword="$KEY_STORE_PASSWORD" \
+  keyPassword="$KEY_STORE_PASSWORD" \
 dart run tool/generate_localization.dart
 dart run tool/generate_new_secrets.dart
-flutter build apk --release --split-per-abi --target-platform android-arm64,android-x64
+flutter build apk --release --split-per-abi --target-platform android-arm64,android-x64,android-arm
 EOF
 
-echo "=== BUILD COMPLETE ==="
+echo -e "\n=== BUILD COMPLETE ===\n"
 ls -lh build/app/outputs/flutter-apk/*.apk
