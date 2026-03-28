@@ -234,6 +234,7 @@ for TARGET in "aarch64-linux-android:arm64-v8a" "armv7a-linux-androideabi:armeab
     -I $ANON_SRC/ \
     -L libs/$ABI/ \
     -o out/$ABI/libtorch.so \
+    -Wl,-z,max-page-size=16384 \
     torch/torch.cpp \
     -lanon -llog -nostdlib++ -lc++_static -lc++abi -lc -lm -ldl
   nm -D out/$ABI/libtorch.so | grep "TOR_start\|TOR_version"
