@@ -267,7 +267,7 @@ if [ ! -f "cw_bitcoin/lib/.secrets.g.dart" ]; then
   echo "const breezApiKey = \"${BREEZ_API_KEY:-dummy_key}\";" > cw_bitcoin/lib/.secrets.g.dart
 fi
 
-## 8: Flutter build (everything inside Docker)
+## Flutter build (everything inside Docker)
 
 cd $CAKE
 
